@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Annotated
+from typing import Annotated, List
 import models
 from database import engine, SessionLocal
 from sqlalchemy.orm import Session
@@ -37,7 +37,7 @@ def get_db():
 
 db_dependency = Annotated[Session, Depends(get_db)]
 
-@app.post("/all_users/")
+@app.post("/all_users/", status_code=status.HTTP_200_OK)
 async def show_all_users(db: db_dependency):
     user = db.query(models.User).all()
     print(user)
@@ -46,12 +46,12 @@ async def show_all_users(db: db_dependency):
     return user
 
 @app.post("/add_users/", status_code=status.HTTP_201_CREATED)
-async def create_user(user: UserBase, db: db_dependency):
-    db_user = models.User(**user.dict())
-    db.add(db_user)
-    db.commit()
+async def create_user(user: List[UserBase], db: db_dependency):
+    for user_data in user:
+        db_user = models.User(**user_data.dict())
+        db.add(db_user)
+        db.commit()
     return JSONResponse({"message": f"New user with username:{db_user.username} has been added"})
-
 
 @app.get("/users/{user_id}", status_code=status.HTTP_200_OK)
 async def read_user(user_id: int, db: db_dependency):
@@ -77,22 +77,14 @@ async def remove_user(userid: IdBase, db: db_dependency):
     db.commit()
     return JSONResponse({"message": f"User with userid:{userid.userid} username:{user.username} has been removed"})
 
-# @app.post("/update_users_id/", status_code=status.HTTP_200_OK)
-# async def fetch_user(userid: UserIdBase, db: db_dependency):
-#     user = db.query(models.User).filter(models.User.id == userid.user_id).first()
-#     if user is None:
-#         raise HTTPException(status_code=404, detail="User Not Found")
-#     db.add(user)
-#     db.commit()
-
 @app.post("/update_user_data/", status_code=status.HTTP_200_OK)
 async def update_user_data(updated_data: UpdateUserData, db: db_dependency):
     existing_user = db.query(models.User).filter(models.User.id == updated_data.user_id).first()
     if existing_user is None:
         raise HTTPException(status_code=404, detail="User Not Found")
     # Update the user data
+    old = existing_user.username
     existing_user.username = updated_data.new_username
     # Commit the changes to the database
     db.commit()
-
-    return existing_user
+    return JSONResponse({"message": f"User with userid:{existing_user.id} username:{old} has been updated to username:{updated_data.new_username}"})
